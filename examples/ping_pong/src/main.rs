@@ -19,9 +19,7 @@ async fn main() -> Result<(), BoxDynError> {
     echo.callback(Message::Ping, move |result| {
         Box::pin(async move {
             let response = result?;
-            if let Response::Pong { counter } = response {
-                println!("Got Pong with counter: {}", counter);
-            }
+            println!("Got Pong: {:?}", response);
             Ok(())
         })
     }).await?;
