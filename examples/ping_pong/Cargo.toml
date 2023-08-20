@@ -1,12 +1,12 @@
 [package]
-name = "test"
+name = "ping_pong"
 version = "0.1.0"
 edition = "2021"
 publish = false
 
 
 [dependencies]
-actorlib = {path = "../lib"}
+actorlib = {path = "../../lib"}
 futures = "0.3.26"
 
 env_logger = "0.10.0"
