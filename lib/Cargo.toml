@@ -1,0 +1,24 @@
+[package]
+name = "actor_lib"
+version = "0.2.0"
+edition = "2021"
+
+authors = ["Evgeny Igumnov <igumnovnsk@gmail.com>"]
+repository = "https://github.com/evgenyigumnov/actor-lib"
+license = "MIT"
+license-file = "../LICENSE"
+keywords = ["actor"]
+categories = ["library"]
+readme = "../README.md"
+description = "Indeed, an actor library, not a framework, written in Rust"
+
+
+
+
+[dependencies]
+futures = "0.3.26"
+
+log = "0.4.17"
+
+tokio = { version = "1.25.0", features = ["full"] }
+
