@@ -28,7 +28,6 @@ actorlib = "0.1.2"
 echo.rs
 
 ```rust
-
 pub struct Echo;
 
 #[derive(Debug)]
@@ -57,7 +56,7 @@ impl Echo {
             Box::pin(async move {
                 match ctx.mgs {
                     Message::Ping => {
-                        println!("Got pong");
+                        println!("Received Ping");
                         let mut state_lock = ctx.state.lock().await;
                         state_lock.counter += 1;
                         Ok(Response::Pong{counter: state_lock.counter})
@@ -79,7 +78,7 @@ async fn main() -> Result<(), BoxDynError> {
     let echo = Echo::new().await;
 
     println!("Sent Ping");
-    echo.send(Message::Ping).await;
+    echo.send(Message::Ping).await?;
 
     println!("Sent Ping and ask response");
     let pong = echo.ask(Message::Ping).await?;
@@ -94,10 +93,26 @@ async fn main() -> Result<(), BoxDynError> {
             }
             Ok(())
         })
-    }).await;
+    }).await?;
 
-    echo.stop();
+    _ = echo.stop();
     thread::sleep(std::time::Duration::from_secs(1));
     Ok(())
 }
 ```
+
+Example output:
+
+```text 
+Sent Ping
+Sent Ping and ask response
+Got ping
+Got ping
+Got Pong: Pong { counter: 2 }
+Sent Ping and wait response in callback
+Got ping
+Got Pong with counter: 3
+
+```
+
+Example sources: https://github.com/evgenyigumnov/actor-lib/tree/main/examples/ping_pong

@@ -29,7 +29,7 @@ impl Echo {
             Box::pin(async move {
                 match ctx.mgs {
                     Message::Ping => {
-                        println!("Got pong");
+                        println!("Received Ping");
                         let mut state_lock = ctx.state.lock().await;
                         state_lock.counter += 1;
                         Ok(Response::Pong{counter: state_lock.counter})
