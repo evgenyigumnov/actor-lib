@@ -7,9 +7,23 @@
 
 Indeed, an actor library, not a framework, written in Rust
 
+## Features
+
+- [x] Async for sending messages
+- [x] Async for messages processing in actor
+- [x] Support messaging like send and forget 
+- [x] Support messaging like send and wait response
+- [x] Mutable state of actor
+- [x] Self reference in actor from context
 
 ## Usage
 
+Cargo.toml
+
+```toml
+[dependencies]
+actorlib = "0.1.2"
+```
 
 echo.rs
 
@@ -74,8 +88,8 @@ async fn main() -> Result<(), BoxDynError> {
     println!("Sent Ping and wait response in callback");
     echo.callback(Message::Ping, move |result| {
         Box::pin(async move {
-            let respone = result?;
-            if let Response::Pong { counter } = respone {
+            let response = result?;
+            if let Response::Pong { counter } = response {
                 println!("Got Pong with counter: {}", counter);
             }
             Ok(())

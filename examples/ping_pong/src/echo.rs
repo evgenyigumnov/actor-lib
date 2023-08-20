@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use actorlib::Actor;
+use actorlib::*;
 
 pub struct Echo;
 

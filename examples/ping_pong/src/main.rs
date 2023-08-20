@@ -9,7 +9,7 @@ async fn main() -> Result<(), BoxDynError> {
     let echo = Echo::new().await;
 
     println!("Sent Ping");
-    echo.send(Message::Ping).await;
+    echo.send(Message::Ping).await?;
 
     println!("Sent Ping and ask response");
     let pong = echo.ask(Message::Ping).await?;
@@ -18,15 +18,15 @@ async fn main() -> Result<(), BoxDynError> {
     println!("Sent Ping and wait response in callback");
     echo.callback(Message::Ping, move |result| {
         Box::pin(async move {
-            let respone = result?;
-            if let Response::Pong { counter } = respone {
+            let response = result?;
+            if let Response::Pong { counter } = response {
                 println!("Got Pong with counter: {}", counter);
             }
             Ok(())
         })
-    }).await;
+    }).await?;
 
-    echo.stop();
+    _ = echo.stop();
     thread::sleep(std::time::Duration::from_secs(1));
     Ok(())
 }
