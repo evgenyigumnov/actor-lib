@@ -3,7 +3,7 @@
 //!
 //! ## Usage
 //! ```rust
-//!use actor_lib::*;
+//!use actorlib::*;
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), BoxDynError> {
