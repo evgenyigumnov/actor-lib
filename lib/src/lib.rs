@@ -1,5 +1,5 @@
-//! # Actor-lib SDK
-//! This is the Rust SDK for Actor-lib.
+//! # Actorlib SDK
+//! This is the Rust SDK for Actorlib.
 //!
 //! ## Usage
 //! ```rust

@@ -6,7 +6,7 @@ publish = false
 
 
 [dependencies]
-actor_lib = {path = "../lib"}
+actorlib = {path = "../lib"}
 futures = "0.3.26"
 
 env_logger = "0.10.0"

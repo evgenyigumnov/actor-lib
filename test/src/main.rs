@@ -5,7 +5,7 @@ mod tests {
     use std::fmt::Debug;
     use std::sync::{Arc};
     use std::thread;
-    use actor_lib::*;
+    use actorlib::*;
 
     #[derive(Debug)]
     pub enum UserMessage {
