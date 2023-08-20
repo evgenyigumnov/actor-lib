@@ -13,7 +13,7 @@ async fn main() -> Result<(), BoxDynError> {
     echo.send(Message::Ping).await;
 
     println!("Sent Ping and ask response");
-    let pong = echo.ask(Message::Ping).await.unwrap();
+    let pong = echo.ask(Message::Ping).await?;
     println!("Got Pong: {:?}", pong);
 
     println!("Sent Ping and wait response in callback");
