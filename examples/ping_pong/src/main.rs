@@ -13,13 +13,13 @@ async fn main() -> Result<(), BoxDynError> {
 
     println!("Sent Ping and ask response");
     let pong = echo.ask(Message::Ping).await?;
-    println!("Got Pong: {:?}", pong);
+    println!("Got {:?}", pong);
 
     println!("Sent Ping and wait response in callback");
     echo.callback(Message::Ping, move |result| {
         Box::pin(async move {
             let response = result?;
-            println!("Got Pong: {:?}", response);
+            println!("Got {:?}", response);
             Ok(())
         })
     }).await?;

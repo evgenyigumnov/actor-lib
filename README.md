@@ -82,15 +82,13 @@ async fn main() -> Result<(), BoxDynError> {
 
     println!("Sent Ping and ask response");
     let pong = echo.ask(Message::Ping).await?;
-    println!("Got Pong: {:?}", pong);
+    println!("Got {:?}", pong);
 
     println!("Sent Ping and wait response in callback");
     echo.callback(Message::Ping, move |result| {
         Box::pin(async move {
             let response = result?;
-            if let Response::Pong { counter } = response {
-                println!("Got Pong with counter: {}", counter);
-            }
+            println!("Got {:?}", response);
             Ok(())
         })
     }).await?;
@@ -106,13 +104,12 @@ Example output:
 ```text 
 Sent Ping
 Sent Ping and ask response
-Got ping
-Got ping
-Got Pong: Pong { counter: 2 }
+Received Ping
+Received Ping
+Got Pong { counter: 2 }
 Sent Ping and wait response in callback
-Got ping
-Got Pong with counter: 3
-
+Received Ping
+Got Pong { counter: 3 }
 ```
 
 Example sources: https://github.com/evgenyigumnov/actor-lib/tree/main/examples/ping_pong
