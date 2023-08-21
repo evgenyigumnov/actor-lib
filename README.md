@@ -22,12 +22,13 @@ Cargo.toml
 
 ```toml
 [dependencies]
-actorlib = "0.1.2"
+actorlib = "0.2.0"
 ```
 
 echo.rs
 
 ```rust
+#[derive(Debug)]
 pub struct Echo;
 
 #[derive(Debug)]
@@ -45,28 +46,30 @@ pub struct State {
     pub counter: u32,
 }
 
-impl Echo {
-    pub async fn new() -> Arc<Actor<Message, State, Response>> {
+#[derive(Debug, Error)]
+pub enum EchoError {
+    #[error("unknown error")]
+    Unknown,
+    #[error("std::io::Error")]
+    StdErr(#[from] std::io::Error),
+}
 
-        let state = State {
-            counter: 0,
-        };
-
-        Actor::new("echo".to_string(), move |ctx| {
-            Box::pin(async move {
-                match ctx.mgs {
-                    Message::Ping => {
-                        println!("Received Ping");
-                        let mut state_lock = ctx.state.lock().await;
-                        state_lock.counter += 1;
-                        Ok(Response::Pong{counter: state_lock.counter})
-                    }
+#[async_trait]
+impl Handler<Echo, Message, State, Response, EchoError> for Echo {
+    async fn receive(&self, ctx: Context<Echo, Message, State, Response, EchoError>) -> Result<Response, EchoError> {
+        match ctx.mgs {
+            Message::Ping => {
+                println!("Received Ping");
+                let mut state_lock = ctx.state.lock().await;
+                state_lock.counter += 1;
+                if state_lock.counter > 10 {
+                    Err(EchoError::Unknown)
+                } else {
+                    Ok(Response::Pong{counter: state_lock.counter})
                 }
-
-            })
-        }, state, 100000).await
+            }
+        }
     }
-
 }
 ```
 
@@ -74,26 +77,21 @@ main.rs
 
 ```rust
 #[tokio::main]
-async fn main() -> Result<(), BoxDynError> {
-    let echo = Echo::new().await;
+async fn main() -> Result<(), EchoError> {
+    let state = State {
+        counter: 0,
+    };
+
+    let echo_ref = ActorRef::new("echo".to_string(), Echo{},  state, 100000).await;
 
     println!("Sent Ping");
-    echo.send(Message::Ping).await?;
+    echo_ref.send(Message::Ping).await?;
 
     println!("Sent Ping and ask response");
-    let pong = echo.ask(Message::Ping).await?;
+    let pong = echo_ref.ask(Message::Ping).await?;
     println!("Got {:?}", pong);
 
-    println!("Sent Ping and wait response in callback");
-    echo.callback(Message::Ping, move |result| {
-        Box::pin(async move {
-            let response = result?;
-            println!("Got {:?}", response);
-            Ok(())
-        })
-    }).await?;
-
-    _ = echo.stop();
+    _ = echo_ref.stop();
     thread::sleep(std::time::Duration::from_secs(1));
     Ok(())
 }
@@ -107,9 +105,6 @@ Sent Ping and ask response
 Received Ping
 Received Ping
 Got Pong { counter: 2 }
-Sent Ping and wait response in callback
-Received Ping
-Got Pong { counter: 3 }
 ```
 
-Example sources: https://github.com/evgenyigumnov/actor-lib/tree/main/examples/ping_pong
+Example sources: https://github.com/evgenyigumnov/actor-lib/tree/main/test

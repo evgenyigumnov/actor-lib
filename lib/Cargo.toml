@@ -1,6 +1,6 @@
 [package]
 name = "actorlib"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2021"
 
 authors = ["Evgeny Igumnov <igumnovnsk@gmail.com>"]
@@ -17,11 +17,8 @@ description = "Indeed, an actor library, not a framework, written in Rust"
 
 [dependencies]
 futures = "0.3.26"
-
+async-trait = "0.1.73"
 log = "0.4.17"
 
 tokio = { version = "1.25.0", features = ["full"] }
 
-[[example]]
-name = "ping_pong"
-path = "../examples/ping_pong/src/main.rs"

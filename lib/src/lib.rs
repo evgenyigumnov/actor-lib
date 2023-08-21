@@ -6,54 +6,56 @@
 //!use actorlib::*;
 //!
 //! #[tokio::main]
-//! async fn main() -> Result<(), BoxDynError> {
+//! async fn main() -> Result<(), std::io::Error> {
 //!
 //!    Ok(())
 //! }
 
 use std::collections::HashMap;
-use std::error::Error;
 use std::fmt::Debug;
 use std::sync::{Arc};
 use tokio::sync::{mpsc, oneshot};
 use tokio::runtime::Runtime;
 use futures::lock::Mutex;
 use std::future::Future;
+use std::marker::PhantomData;
 use std::pin::Pin;
+use async_trait::async_trait;
 use tokio::sync::oneshot::Sender;
 
-pub type BoxDynError =  Box<dyn Error + Send + Sync>;
 pub type CallbackFuture<O> = Pin<Box<dyn Future<Output = O> + Send>>;
-pub type Callback<T> = Box<dyn (Fn(T) -> CallbackFuture<Result<(), BoxDynError>>) + Send + Sync>;
+pub type Callback<T,E> = Box<dyn (Fn(T) -> CallbackFuture<Result<(), E>>) + Send + Sync>;
 
 
 
 #[derive(Debug)]
-pub struct Actor<Message, State, Response> {
+pub struct ActorRef<Actor, Message, State, Response, Error> {
     tx: Mutex<Option<mpsc::Sender<(Message, i32)>>>,
     rt:  Mutex<Option<Arc<Runtime>>>,
     join_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
     state: Option<Arc<Mutex<State>>>,
-    self_ref: Mutex<Option<Arc<Actor<Message, State, Response>>>>,
+    self_ref: Mutex<Option<Arc<ActorRef<Actor, Message, State, Response, Error>>>>,
     message_id: Mutex<i32>,
-    call_back: Mutex<HashMap<i32, Callback<Result<Response, BoxDynError>>>>,
-    promise: Mutex<HashMap<i32, Sender<Result<Response, BoxDynError>>>>,
+    promise: Mutex<HashMap<i32, Sender<Result<Response, Error>>>>,
     name: String,
+    actor: PhantomData<Actor>,
 
 }
 #[derive(Debug)]
-pub struct Context<Message, State, Response> {
+pub struct Context<Actor,Message, State, Response, Error> {
     pub mgs: Message,
     pub state: Arc<Mutex<State>>,
-    pub self_ref: Arc<Actor<Message, State, Response>>,
+    pub self_ref: Arc<ActorRef<Actor, Message, State, Response, Error>>,
 }
 
+#[async_trait]
+pub trait Handler <Actor,Message, State, Response, Error> {
+    async fn receive(&self, ctx: Context<Actor, Message, State, Response, Error>) -> Result<Response, Error>;
+}
 
-impl<Message: Debug + Send + Sync + 'static, State: Debug + Send + Sync + 'static, Response: Debug + Send + Sync + 'static> Actor<Message, State, Response> {
-     pub async fn new<F>(name: String, handler: F, state: State, buffer: usize) -> Arc<Self>
-        where
-            F: Fn(Context<Message, State, Response>) -> CallbackFuture<Result<Response, BoxDynError>>,
-            F: Send + Sync + 'static,
+impl<Actor: Handler<Actor, Message, State, Response, Error> + Debug + Send + Sync + 'static, Message: Debug + Send + Sync + 'static, State: Debug + Send + Sync + 'static,
+    Response: Debug + Send + Sync + 'static, Error: std::error::Error +  Debug + Send + Sync + From<std::io::Error> + 'static> ActorRef<Actor, Message, State, Response, Error> {
+     pub async fn new(name: String, actor:Actor, state: State, buffer: usize) -> Arc<Self>
     {
         let state_arc = Arc::new(Mutex::new(state));
         let state_clone = state_arc.clone();
@@ -64,19 +66,19 @@ impl<Message: Debug + Send + Sync + 'static, State: Debug + Send + Sync + 'stati
             .build()
             .unwrap();
 
-        let actor = Actor {
+        let actor_ref = ActorRef {
             tx: Mutex::new(Some(tx)),
             rt: Mutex::new(None),
             join_handle: Mutex::new(None),
             state: Some(state_clone),
             self_ref: Mutex::new(None),
             message_id: Mutex::new(0),
-            call_back: Mutex::new(HashMap::new()),
             promise: Mutex::new(HashMap::new()),
             name: name,
+            actor: PhantomData,
         };
 
-        let ret = Arc::new(actor);
+        let ret = Arc::new(actor_ref);
         let ret_clone = ret.clone();
         let ret_clone2 = ret.clone();
         let ret_clone3 = ret.clone();
@@ -101,37 +103,26 @@ impl<Message: Debug + Send + Sync + 'static, State: Debug + Send + Sync + 'stati
                     state: state,
                     self_ref: me.clone(),
                 };
-                let r = handler(context);
+
+                let r = actor.receive(context);
                 {
                     let result = r.await;
                     log::trace!("<{}> Work result: {:?}", me.name, result);
                     if result.is_err() {
                         log::error!("<{}> Work error: {:?}", me.name, result);
                     }
-                    let mut call_back_lock = ret_clone3.call_back.lock().await;
-                    let call_back = call_back_lock.remove(&message_id);
-                    match call_back {
+                    let mut promise_lock = ret_clone3.promise.lock().await;
+                    let promise = promise_lock.remove(&message_id);
+                    match promise {
                         None => {
-                            log::trace!("<{}> No callback for message_id: {}", me.name, message_id);
-
-                            let mut promise_lock = ret_clone3.promise.lock().await;
-                            let promise = promise_lock.remove(&message_id);
-                            match promise {
-                                None => {
-                                    log::trace!("<{}> No promise for message_id: {}", me.name, message_id);
-                                }
-                                Some(promise) => {
-                                    log::trace!("<{}> Promise result: {:?}", me.name, result);
-                                    let _ = promise.send(result);
-                                }
-                            }
-
+                            log::trace!("<{}> No promise for message_id: {}", me.name, message_id);
                         }
-                        Some(call_back) => {
-                            log::trace!("<{}> Callback result: {:?}", me.name, result);
-                            let _ = call_back(result).await;
+                        Some(promise) => {
+                            log::trace!("<{}> Promise result: {:?}", me.name, result);
+                            let _ = promise.send(result);
                         }
                     }
+
                 }
                 let state_clone = state_arc.clone();
                 let state_lock = state_clone.lock().await;
@@ -145,34 +136,9 @@ impl<Message: Debug + Send + Sync + 'static, State: Debug + Send + Sync + 'stati
         ret_clone
     }
 
-    pub async fn callback<F>(&self, msg: Message, handler: F) -> Result<(), BoxDynError>
-        where
-            F: Fn(Result<Response, BoxDynError>) -> CallbackFuture<Result<(), BoxDynError>>,
-            F: Send + Sync + 'static,
+
+    pub async fn ask(&self, mgs: Message) -> Result<Response, Error>
     {
-
-
-        log::trace!("<{}> Ask message: {:?}", self.name, msg);
-        let tx_lock = self.tx.lock().await;
-        let tx = tx_lock.as_ref();
-        match tx {
-            None => {
-                return Err(std::io::Error::new(std::io::ErrorKind::Other, "Err").into());
-            }
-            Some(tx) => {
-                let mut message_id_lock = self.message_id.lock().await;
-                *message_id_lock += 1;
-                let mut call_back_lock = self.call_back.lock().await;
-                call_back_lock.insert(*message_id_lock, Box::new(handler));
-                tx.send((msg, *message_id_lock)).await?;
-            }
-        }
-        Ok(())
-    }
-
-    pub async fn ask(&self, mgs: Message) -> Result<Response, BoxDynError>
-    {
-
         log::trace!("<{}> Result message: {:?}", self.name, mgs);
         let tx_lock = self.tx.lock().await;
         let tx = tx_lock.as_ref();
@@ -187,17 +153,25 @@ impl<Message: Debug + Send + Sync + 'static, State: Debug + Send + Sync + 'stati
                     *message_id_lock += 1;
                     let mut promise_lock = self.promise.lock().await;
                     promise_lock.insert(*message_id_lock, sender);
-                    tx.send((mgs, *message_id_lock)).await?;
+                    let r = tx.send((mgs, *message_id_lock)).await;
+                    if r.is_err() {
+                        return Err(std::io::Error::new(std::io::ErrorKind::Other, "Err").into());
+                    }
                 }
-                let result:Result<Response, BoxDynError> = receiver.await?;
-                result
+                let r = receiver.await;
+                match r {
+                    Ok(res) => {res}
+                    Err(_) => {
+                        return Err(std::io::Error::new(std::io::ErrorKind::Other, "Err").into());
+                    }
+                }
             }
         }
     }
 
 
 
-    pub async fn send(&self, msg: Message) -> Result<(), BoxDynError> {
+    pub async fn send(&self, msg: Message) -> Result<(), std::io::Error> {
         log::trace!("<{}> Push message: {:?}", self.name, msg);
         let tx_lock = self.tx.lock().await;
         let tx = tx_lock.as_ref();
@@ -206,13 +180,19 @@ impl<Message: Debug + Send + Sync + 'static, State: Debug + Send + Sync + 'stati
                 return Err(std::io::Error::new(std::io::ErrorKind::Other, "Err").into());
             }
             Some(tx) => {
-                tx.send((msg, 0)).await?;
+                let r = tx.send((msg, 0)).await;
+                match r {
+                    Ok(_) => {}
+                    Err(_) => {
+                        return Err(std::io::Error::new(std::io::ErrorKind::Other, "Err").into());
+                    }
+                }
             }
         }
         Ok(())
     }
 
-    pub async fn state(&self) -> Result<Arc<Mutex<State>>, BoxDynError> {
+    pub async fn state(&self) -> Result<Arc<Mutex<State>>, std::io::Error> {
         let state_opt = self.state.clone();
         log::trace!("<{}> State: {:?}", self.name, state_opt);
         match state_opt {
@@ -234,7 +214,6 @@ impl<Message: Debug + Send + Sync + 'static, State: Debug + Send + Sync + 'stati
         *rt_lock = None;
         let mut me_lock = self.self_ref.lock().await;
         *me_lock = None;
-        // self.state = None;
         let mut join_handle_lock = self.join_handle.lock().await;
         *join_handle_lock = None;
         log::debug!("<{}> Stop worker", self.name);
