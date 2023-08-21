@@ -22,7 +22,7 @@ Cargo.toml
 
 ```toml
 [dependencies]
-actorlib = "0.2.0"
+actorlib = "1.0.0"
 ```
 
 echo.rs
