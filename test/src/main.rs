@@ -63,7 +63,6 @@ mod tests {
         StdErr(#[from] std::io::Error),
     }
 
-
     #[async_trait]
     impl Handler<UserActor, UserMessage, UserState, UserResponse, UserError> for UserActor {
 
@@ -85,8 +84,11 @@ mod tests {
            UserActor {}, UserState {name: "".to_string()}, 10000).await;
 
         user.send(UserMessage::CreateAccount{ account_id: 0 }).await?;
-        let result= user.ask(UserMessage::CreateAccount{ account_id: 0 }).await?;
+        let result: UserResponse = user.ask(UserMessage::CreateAccount{ account_id: 0 }).await?;
 
+        let actor_state = user.state().await?;
+        let state_lock = actor_state.lock().await;
+        let name_from_state = state_lock.name.clone();
 
 
         thread::sleep(std::time::Duration::from_millis(100));
