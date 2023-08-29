@@ -66,7 +66,7 @@ mod tests {
     #[async_trait]
     impl Handler<UserActor, UserMessage, UserState, UserResponse, UserError> for UserActor {
 
-        async fn receive(&self, ctx: Context<UserActor, UserMessage, UserState, UserResponse, UserError>) -> Result<UserResponse, UserError> {
+        async fn receive(&self, ctx: Arc<Context<UserActor, UserMessage, UserState, UserResponse, UserError>>) -> Result<UserResponse, UserError> {
             match ctx.mgs {
                 UserMessage::GetBalance { .. } => {
                     Ok(UserResponse::Balance { amount: 100 })

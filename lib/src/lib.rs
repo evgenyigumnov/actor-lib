@@ -50,7 +50,7 @@ pub struct Context<Actor,Message, State, Response, Error> {
 
 #[async_trait]
 pub trait Handler <Actor,Message, State, Response, Error> {
-    async fn receive(&self, ctx: Context<Actor, Message, State, Response, Error>) -> Result<Response, Error>;
+    async fn receive(&self, ctx: Arc<Context<Actor, Message, State, Response, Error>>) -> Result<Response, Error>;
 }
 
 impl<Actor: Handler<Actor, Message, State, Response, Error> + Debug + Send + Sync + 'static, Message: Debug + Send + Sync + 'static, State: Debug + Send + Sync + 'static,
@@ -104,7 +104,7 @@ impl<Actor: Handler<Actor, Message, State, Response, Error> + Debug + Send + Syn
                     self_ref: me.clone(),
                 };
 
-                let r = actor.receive(context);
+                let r = actor.receive(Arc::new(context));
                 {
                     let result = r.await;
                     log::trace!("<{}> Work result: {:?}", me.name, result);
