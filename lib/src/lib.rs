@@ -97,6 +97,7 @@ impl<Actor: Handler<Actor, Message, State, Response, Error> + Debug + Send + Syn
                     log::debug!("<{}> Got message: {:?} Current state: {:?}", me.name, msg, state_lock);
 
                 }
+                let msg_debug = format!("{:?}", msg);
                 let state = state_arc.clone();
                 let context = Context {
                     mgs: msg,
@@ -109,7 +110,7 @@ impl<Actor: Handler<Actor, Message, State, Response, Error> + Debug + Send + Syn
                     let result = r.await;
                     log::trace!("<{}> Work result: {:?}", me.name, result);
                     if result.is_err() {
-                        log::error!("<{}> Work error: {:?}", me.name, result);
+                        log::error!("<{}> Work error: {:?} on message {}", me.name, result, msg_debug);
                     }
                     let mut promise_lock = ret_clone3.promise.lock().await;
                     let promise = promise_lock.remove(&message_id);
