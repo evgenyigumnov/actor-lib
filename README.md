@@ -22,7 +22,7 @@ Cargo.toml
 
 ```toml
 [dependencies]
-actorlib = "1.0.0"
+actorlib = "1.2.1"
 ```
 
 echo.rs
@@ -56,7 +56,7 @@ pub enum EchoError {
 
 #[async_trait]
 impl Handler<Echo, Message, State, Response, EchoError> for Echo {
-    async fn receive(&self, ctx: Context<Echo, Message, State, Response, EchoError>) -> Result<Response, EchoError> {
+    async fn receive(&self, ctx: Arc<Context<Echo, Message, State, Response, EchoError>>) -> Result<Response, EchoError> {
         match ctx.mgs {
             Message::Ping => {
                 println!("Received Ping");
