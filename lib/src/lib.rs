@@ -181,11 +181,12 @@ impl<Actor: Handler<Actor, Message, State, Response, Error> + Debug + Send + Syn
                 return Err(std::io::Error::new(std::io::ErrorKind::Other, "Err").into());
             }
             Some(tx) => {
-                let r = tx.send((msg, 0)).await;
+                let r = tx.try_send((msg, 0));
                 match r {
                     Ok(_) => {}
-                    Err(_) => {
-                        return Err(std::io::Error::new(std::io::ErrorKind::Other, "Err").into());
+                    Err(err) => {
+                        let err_str = format!("{:?}", err);
+                        return Err(std::io::Error::new(std::io::ErrorKind::Other, err_str).into());
                     }
                 }
             }
