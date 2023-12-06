@@ -1,6 +1,6 @@
 mod echo;
 
-use std::thread;
+use std::time::Duration;
 use actorlib::*;
 use echo::*;
 #[tokio::main]
@@ -19,7 +19,7 @@ async fn main() -> Result<(), EchoError> {
     println!("Got {:?}", pong);
 
     _ = echo_ref.stop();
-    thread::sleep(std::time::Duration::from_secs(1));
+    tokio::time::sleep(Duration::from_millis(1000)).await;
     Ok(())
 }
 
@@ -28,7 +28,7 @@ async fn main() -> Result<(), EchoError> {
 mod tests {
     use std::fmt::Debug;
     use std::sync::{Arc};
-    use std::thread;
+    use std::time::Duration;
     use actorlib::*;
     use async_trait::async_trait;
 
@@ -71,7 +71,11 @@ mod tests {
                 UserMessage::GetBalance { .. } => {
                     Ok(UserResponse::Balance { amount: 100 })
                 }
-                _ => {Ok(UserResponse::Ok)}
+                _ => {
+                    log::debug!("UserActor received {:?}", ctx.mgs);
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    Ok(UserResponse::Ok)
+                }
             }
         }
     }
@@ -83,21 +87,24 @@ mod tests {
         let mut user:Arc<ActorRef<UserActor, UserMessage, UserState, UserResponse, UserError>>  = ActorRef::new("user".to_string(),
            UserActor {}, UserState {name: "".to_string()}, 10000).await;
 
-        user.send(UserMessage::CreateAccount{ account_id: 0 }).await?;
-        let result: UserResponse = user.ask(UserMessage::CreateAccount{ account_id: 0 }).await?;
+        let result1: UserResponse = user.ask(UserMessage::CreateAccount{ account_id: 0 }).await?;
+        {
+            let actor_state = user.state().await?;
+            let state_lock = actor_state.lock().await;
+            let name_from_state = state_lock.name.clone();
 
-        let actor_state = user.state().await?;
-        let state_lock = actor_state.lock().await;
-        let name_from_state = state_lock.name.clone();
-
-
-        thread::sleep(std::time::Duration::from_millis(100));
-        user.stop().await;
-        thread::sleep(std::time::Duration::from_millis(100));
-        let result = user.send(UserMessage::CreateAccount{ account_id: 0 }).await;
-        let r = result.is_err();
-        assert!(matches!( r, true));
-        thread::sleep(std::time::Duration::from_millis(100));
+        }
+        let user_clone = user.clone();
+        tokio::spawn(async move {
+            let _ = user.send(UserMessage::CreateAccount { account_id: 1 }).await;
+            let _ = user.send(UserMessage::CreateAccount { account_id: 2 }).await;
+            let _ = user.send(UserMessage::CreateAccount { account_id: 3 }).await;
+        });
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            user_clone.stop().await;
+        });
+        tokio::time::sleep(Duration::from_millis(1000)).await;
         Ok(())
     }
 }

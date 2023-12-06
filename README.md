@@ -22,7 +22,7 @@ Cargo.toml
 
 ```toml
 [dependencies]
-actorlib = "1.2.1"
+actorlib = "1.2.2"
 ```
 
 echo.rs
@@ -92,7 +92,7 @@ async fn main() -> Result<(), EchoError> {
     println!("Got {:?}", pong);
 
     _ = echo_ref.stop();
-    thread::sleep(std::time::Duration::from_secs(1));
+    tokio::time::sleep(Duration::from_millis(1000)).await;
     Ok(())
 }
 ```
