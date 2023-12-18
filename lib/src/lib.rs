@@ -15,9 +15,8 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::{Arc};
 use tokio::sync::{mpsc, oneshot};
-use futures::lock::Mutex;
+use futures::lock::{Mutex};
 use std::future::Future;
-use std::marker::PhantomData;
 use std::pin::Pin;
 use async_trait::async_trait;
 use tokio::sync::oneshot::Sender;
@@ -35,8 +34,7 @@ pub struct ActorRef<Actor, Message, State, Response, Error> {
     message_id: Mutex<i32>,
     promise: Mutex<HashMap<i32, Sender<Result<Response, Error>>>>,
     name: String,
-    actor: PhantomData<Actor>,
-
+    actor: Arc<Actor>,
 }
 
 #[derive(Debug)]
@@ -47,17 +45,25 @@ pub struct Context<Actor, Message, State, Response, Error> {
 }
 
 #[async_trait]
-pub trait Handler<Actor, Message, State, Response, Error> {
+pub trait Handler<Actor: Sync + Send + 'static, Message: Sync + Send + 'static, State: Sync + Send + 'static, Response: Sync + Send + 'static, Error: Sync + Send + 'static> {
     async fn receive(&self, ctx: Arc<Context<Actor, Message, State, Response, Error>>) -> Result<Response, Error>;
+    async fn pre_start(&self, _state: Arc<Mutex<State>>, _self_ref: Arc<ActorRef<Actor, Message, State, Response, Error>>) -> Result<(), Error> {
+        Ok(())
+    }
+    async fn pre_stop(&self, _state: Arc<Mutex<State>>, _self_ref: Arc<ActorRef<Actor, Message, State, Response, Error>>) -> Result<(), Error> {
+        Ok(())
+    }
 }
 
 impl<Actor: Handler<Actor, Message, State, Response, Error> + Debug + Send + Sync + 'static, Message: Debug + Send + Sync + 'static, State: Debug + Send + Sync + 'static,
     Response: Debug + Send + Sync + 'static, Error: std::error::Error + Debug + Send + Sync + From<std::io::Error> + 'static> ActorRef<Actor, Message, State, Response, Error> {
-    pub async fn new(name: String, actor: Actor, state: State, buffer: usize) -> Arc<Self>
+    pub async fn new(name: String, actor: Actor, state: State, buffer: usize) -> Result<Arc<Self>, Error>
     {
         let state_arc = Arc::new(Mutex::new(state));
         let state_clone = state_arc.clone();
         let (tx, mut rx) = mpsc::channel(buffer);
+        let actor_arc= Arc::new(actor);
+        let actor = actor_arc.clone();
         let actor_ref = ActorRef {
             tx: Mutex::new(Some(tx)),
             join_handle: Mutex::new(None),
@@ -66,7 +72,7 @@ impl<Actor: Handler<Actor, Message, State, Response, Error> + Debug + Send + Syn
             message_id: Mutex::new(0),
             promise: Mutex::new(HashMap::new()),
             name: name,
-            actor: PhantomData,
+            actor: actor_arc.clone(),
         };
 
         let ret = Arc::new(actor_ref);
@@ -75,7 +81,6 @@ impl<Actor: Handler<Actor, Message, State, Response, Error> + Debug + Send + Syn
         let ret_clone3 = ret.clone();
         let mut me = ret.self_ref.lock().await;
         *me = Some(ret.clone());
-
 
         let join_handle = tokio::spawn(async move {
             let me = ret_clone2.clone();
@@ -146,9 +151,9 @@ impl<Actor: Handler<Actor, Message, State, Response, Error> + Debug + Send + Syn
         });
         let mut join_handle_lock = ret.join_handle.lock().await;
         *join_handle_lock = Some(join_handle);
+        let _ = actor_arc.pre_start(ret_clone.state.clone().unwrap(), ret_clone.clone()).await?;
         log::info!("<{}> Actor started", ret_clone.name);
-
-        ret_clone
+        Ok(ret_clone)
     }
 
 
@@ -224,7 +229,12 @@ impl<Actor: Handler<Actor, Message, State, Response, Error> + Debug + Send + Syn
         }
     }
 
-    pub async fn stop(&self) {
+    pub async fn stop(&self) -> Result<(), Error> {
+        {
+            let self_ref_opt = self.self_ref.lock().await;
+            let self_ref = self_ref_opt.clone().unwrap();
+            let _ = self.actor.pre_stop(self.state.clone().unwrap(), self_ref).await?;
+        }
         let mut tx_lock = self.tx.lock().await;
         *tx_lock = None;
         let mut me_lock = self.self_ref.lock().await;
@@ -240,6 +250,7 @@ impl<Actor: Handler<Actor, Message, State, Response, Error> + Debug + Send + Syn
         }
         *join_handle_lock = None;
         log::debug!("<{}> Stop worker", self.name);
+        Ok(())
     }
 }
 

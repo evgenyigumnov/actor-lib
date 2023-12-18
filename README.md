@@ -15,6 +15,7 @@ Indeed, an actor library, not a framework, written in Rust
 - [x] Support messaging like send and wait response
 - [x] Mutable state of actor
 - [x] Self reference in actor from context
+- [x] Actor lifecycle (pre_start, pre_stop)
 
 ## Usage
 
@@ -22,7 +23,7 @@ Cargo.toml
 
 ```toml
 [dependencies]
-actorlib = "1.2.2"
+actorlib = "1.2.3"
 ```
 
 echo.rs
@@ -82,7 +83,7 @@ async fn main() -> Result<(), EchoError> {
         counter: 0,
     };
 
-    let echo_ref = ActorRef::new("echo".to_string(), Echo{},  state, 100000).await;
+    let echo_ref = ActorRef::new("echo".to_string(), Echo{},  state, 100000).await?;
 
     println!("Sent Ping");
     echo_ref.send(Message::Ping).await?;

@@ -9,7 +9,7 @@ async fn main() -> Result<(), EchoError> {
         counter: 0,
     };
 
-    let echo_ref = ActorRef::new("echo".to_string(), Echo{},  state, 100000).await;
+    let echo_ref = ActorRef::new("echo".to_string(), Echo{},  state, 100000).await?;
 
     println!("Sent Ping");
     echo_ref.send(Message::Ping).await?;
@@ -85,7 +85,7 @@ mod tests {
         let _ = env_logger::Builder::from_env(env_logger::Env::new().default_filter_or("trace")).try_init();
 
         let mut user:Arc<ActorRef<UserActor, UserMessage, UserState, UserResponse, UserError>>  = ActorRef::new("user".to_string(),
-           UserActor {}, UserState {name: "".to_string()}, 10000).await;
+           UserActor {}, UserState {name: "".to_string()}, 10000).await?;
 
         let result1: UserResponse = user.ask(UserMessage::CreateAccount{ account_id: 0 }).await?;
         {
