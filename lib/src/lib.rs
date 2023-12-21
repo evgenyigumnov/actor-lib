@@ -79,8 +79,7 @@ impl<Actor: Handler<Actor, Message, State, Response, Error> + Debug + Send + Syn
         let ret_clone = ret.clone();
         let ret_clone2 = ret.clone();
         let ret_clone3 = ret.clone();
-        let mut me = ret.self_ref.lock().await;
-        *me = Some(ret.clone());
+        *ret.self_ref.lock().await = Some(ret.clone());
 
         let join_handle = tokio::spawn(async move {
             let me = ret_clone2.clone();
@@ -102,11 +101,7 @@ impl<Actor: Handler<Actor, Message, State, Response, Error> + Debug + Send + Syn
                                     let msg = message.0;
                                     let message_id = message.1;
                                     let state_clone = state_arc.clone();
-                                    {
-                                        let state_lock = state_clone.lock().await;
-                                        log::debug!("<{}> Got message: {:?} Current state: {:?}", me.name, msg, state_lock);
-
-                                    }
+                                    log::debug!("<{}> Got message: {:?} Current state: {:?}", me.name, msg, state_clone.lock().await);
                                     let msg_debug = format!("{:?}", msg);
                                     let state = state_arc.clone();
                                     let context = Context {
@@ -122,8 +117,7 @@ impl<Actor: Handler<Actor, Message, State, Response, Error> + Debug + Send + Syn
                                         if result.is_err() {
                                             log::error!("<{}> Work error: {:?} on message {}", me.name, result, msg_debug);
                                         }
-                                        let mut promise_lock = ret_clone3.promise.lock().await;
-                                        let promise = promise_lock.remove(&message_id);
+                                        let promise = ret_clone3.promise.lock().await.remove(&message_id);
                                         match promise {
                                             None => {
                                                 log::trace!("<{}> No promise for message_id: {}", me.name, message_id);
@@ -136,8 +130,7 @@ impl<Actor: Handler<Actor, Message, State, Response, Error> + Debug + Send + Syn
 
                                     }
                                     let state_clone = state_arc.clone();
-                                    let state_lock = state_clone.lock().await;
-                                    log::trace!("<{}> After work on message new state: {:?}", me.name, state_lock);
+                                    log::trace!("<{}> After work on message new state: {:?}", me.name, state_clone.lock().await);
 
 
 
@@ -149,8 +142,7 @@ impl<Actor: Handler<Actor, Message, State, Response, Error> + Debug + Send + Syn
             }
             }
         });
-        let mut join_handle_lock = ret.join_handle.lock().await;
-        *join_handle_lock = Some(join_handle);
+        *ret.join_handle.lock().await = Some(join_handle);
         let _ = actor_arc.pre_start(ret_clone.state.clone().unwrap(), ret_clone.clone()).await?;
         log::info!("<{}> Actor started", ret_clone.name);
         Ok(ret_clone)
@@ -169,11 +161,9 @@ impl<Actor: Handler<Actor, Message, State, Response, Error> + Debug + Send + Syn
             Some(tx) => {
                 let (sender, receiver) = oneshot::channel();
                 {
-                    let mut message_id_lock = self.message_id.lock().await;
-                    *message_id_lock += 1;
-                    let mut promise_lock = self.promise.lock().await;
-                    promise_lock.insert(*message_id_lock, sender);
-                    let r = tx.send((mgs, *message_id_lock)).await;
+                    *self.message_id.lock().await += 1;
+                    self.promise.lock().await.insert(*self.message_id.lock().await, sender);
+                    let r = tx.send((mgs, *self.message_id.lock().await)).await;
                     if r.is_err() {
                         return Err(std::io::Error::new(std::io::ErrorKind::Other, "Err").into());
                     }
@@ -230,17 +220,11 @@ impl<Actor: Handler<Actor, Message, State, Response, Error> + Debug + Send + Syn
     }
 
     pub async fn stop(&self) -> Result<(), Error> {
-        {
-            let self_ref_opt = self.self_ref.lock().await;
-            let self_ref = self_ref_opt.clone().unwrap();
-            let _ = self.actor.pre_stop(self.state.clone().unwrap(), self_ref).await?;
-        }
-        let mut tx_lock = self.tx.lock().await;
-        *tx_lock = None;
-        let mut me_lock = self.self_ref.lock().await;
-        *me_lock = None;
-        let mut join_handle_lock = self.join_handle.lock().await;
-        let join_handle = join_handle_lock.take();
+        let self_ref =  self.self_ref.lock().await.clone().unwrap();
+        let _ = self.actor.pre_stop(self.state.clone().unwrap(), self_ref).await?;
+        *self.tx.lock().await = None;
+        *self.self_ref.lock().await = None;
+        let join_handle = self.join_handle.lock().await.take();
         match join_handle {
             None => {}
             Some(join_handle) => {
@@ -248,7 +232,7 @@ impl<Actor: Handler<Actor, Message, State, Response, Error> + Debug + Send + Syn
                 log::debug!("join_handle abort()");
             }
         }
-        *join_handle_lock = None;
+        *self.join_handle.lock().await = None;
         log::debug!("<{}> Stop worker", self.name);
         Ok(())
     }
