@@ -35,6 +35,7 @@ pub struct ActorRef<Actor, Message, State, Response, Error> {
     promise: Mutex<HashMap<i32, Sender<Result<Response, Error>>>>,
     name: String,
     actor: Arc<Actor>,
+    running: Mutex<bool>,
 }
 
 #[derive(Debug)]
@@ -73,6 +74,7 @@ impl<Actor: Handler<Actor, Message, State, Response, Error> + Debug + Send + Syn
             promise: Mutex::new(HashMap::new()),
             name: name,
             actor: actor_arc.clone(),
+            running: Mutex::new(false),
         };
 
         let ret = Arc::new(actor_ref);
@@ -97,7 +99,9 @@ impl<Actor: Handler<Actor, Message, State, Response, Error> + Debug + Send + Syn
                                 break;
                             }
                             Some(message) => {
-
+                                    if *ret_clone3.running.lock().await == false {
+                                        return ();
+                                    }
                                     let msg = message.0;
                                     let message_id = message.1;
                                     let state_clone = state_arc.clone();
@@ -144,6 +148,7 @@ impl<Actor: Handler<Actor, Message, State, Response, Error> + Debug + Send + Syn
         });
         *ret.join_handle.lock().await = Some(join_handle);
         let _ = actor_arc.pre_start(ret_clone.state.clone().unwrap(), ret_clone.clone()).await?;
+        *ret.running.lock().await = true;
         log::info!("<{}> Actor started", ret_clone.name);
         Ok(ret_clone)
     }
@@ -220,8 +225,12 @@ impl<Actor: Handler<Actor, Message, State, Response, Error> + Debug + Send + Syn
     }
 
     pub async fn stop(&self) -> Result<(), Error> {
+        if *self.running.lock().await == false {
+            return Ok(());
+        }
         let self_ref =  self.self_ref.lock().await.clone().unwrap();
         let _ = self.actor.pre_stop(self.state.clone().unwrap(), self_ref).await?;
+        *self.running.lock().await = false;
         *self.tx.lock().await = None;
         *self.self_ref.lock().await = None;
         let join_handle = self.join_handle.lock().await.take();
